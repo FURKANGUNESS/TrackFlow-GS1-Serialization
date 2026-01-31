@@ -1,0 +1,1142 @@
+using Trackflow.Client.Services;
+using Trackflow.Shared.DTOs;
+using Trackflow.Shared.Enums;
+
+namespace Trackflow.Client.Forms;
+
+public class MainForm : Form
+{
+    private readonly ApiClient _apiClient;
+    private readonly Label _statusLabel;
+    private readonly Panel _contentPanel;
+
+    public MainForm()
+    {
+        _apiClient = new ApiClient();
+
+        Text = "Trackflow - Serilizasyon Sistemi";
+        Size = new Size(1024, 768);
+        StartPosition = FormStartPosition.CenterScreen;
+
+        // Menu Panel
+        var menuPanel = new Panel
+        {
+            Dock = DockStyle.Left,
+            Width = 250,
+            BackColor = Color.FromArgb(45, 45, 48)
+        };
+
+        var titleLabel = new Label
+        {
+            Text = "TRACKFLOW",
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 16, FontStyle.Bold),
+            Location = new Point(20, 20),
+            AutoSize = true
+        };
+        menuPanel.Controls.Add(titleLabel);
+
+        var btnCustomers = CreateMenuButton("Müşteriler", 80);
+        btnCustomers.Click += async (s, e) => await ShowCustomersAsync();
+        menuPanel.Controls.Add(btnCustomers);
+
+        var btnProducts = CreateMenuButton("Ürünler", 130);
+        btnProducts.Click += async (s, e) => await ShowProductsAsync();
+        menuPanel.Controls.Add(btnProducts);
+
+        var btnWorkOrders = CreateMenuButton("İş Emirleri", 180);
+        btnWorkOrders.Click += async (s, e) => await ShowWorkOrdersAsync();
+        menuPanel.Controls.Add(btnWorkOrders);
+
+        var btnSettings = CreateMenuButton("Ayarlar", menuPanel.Height - 60);
+        btnSettings.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+        btnSettings.Click += (s, e) => ShowSettingsPage();
+        menuPanel.Controls.Add(btnSettings);
+
+        // Status Bar
+        _statusLabel = new Label
+        {
+            Dock = DockStyle.Bottom,
+            Height = 30,
+            BackColor = Color.FromArgb(0, 122, 204),
+            ForeColor = Color.White,
+            Text = "  Hazır",
+            TextAlign = ContentAlignment.MiddleLeft,
+            Font = new Font("Segoe UI", 10)
+        };
+
+        // Content Panel
+        _contentPanel = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Color.White,
+            Padding = new Padding(20)
+        };
+
+        Controls.Add(_contentPanel);
+        Controls.Add(menuPanel);
+        Controls.Add(_statusLabel);
+
+        Load += (s, e) => ShowSettingsPage();
+    }
+
+    private Button CreateMenuButton(string text, int top)
+    {
+        return new Button
+        {
+            Text = text,
+            Location = new Point(10, top),
+            Size = new Size(230, 40),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(62, 62, 66),
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 10),
+            Cursor = Cursors.Hand
+        };
+    }
+
+    private void SetStatus(string message)
+    {
+        _statusLabel.Text = $"  {message}";
+    }
+
+    private void ClearContent()
+    {
+        _contentPanel.Controls.Clear();
+    }
+
+    private async Task ShowHealthAsync()
+    {
+        ClearContent();
+        SetStatus("Sistem durumu kontrol ediliyor...");
+
+        try
+        {
+            var health = await _apiClient.GetHealthAsync();
+
+            var titleLabel = new Label
+            {
+                Text = "Sistem Durumu",
+                Font = new Font("Segoe UI", 18, FontStyle.Bold),
+                Location = new Point(20, 20),
+                AutoSize = true
+            };
+            _contentPanel.Controls.Add(titleLabel);
+
+            var statusLabel = new Label
+            {
+                Text = $"Genel Durum: {health?.Status ?? "Bilinmiyor"}",
+                Font = new Font("Segoe UI", 14),
+                ForeColor = health?.Status == "Healthy" ? Color.Green : Color.Red,
+                Location = new Point(20, 70),
+                AutoSize = true
+            };
+            _contentPanel.Controls.Add(statusLabel);
+
+            int y = 120;
+            if (health?.Checks != null)
+            {
+                foreach (var check in health.Checks)
+                {
+                    var checkLabel = new Label
+                    {
+                        Text = $"• {check.Name}: {check.Status} ({check.Duration})",
+                        Font = new Font("Segoe UI", 11),
+                        ForeColor = check.Status == "Healthy" ? Color.DarkGreen : Color.DarkRed,
+                        Location = new Point(40, y),
+                        AutoSize = true
+                    };
+                    _contentPanel.Controls.Add(checkLabel);
+                    y += 30;
+
+                    if (!string.IsNullOrEmpty(check.Exception))
+                    {
+                        var exLabel = new Label
+                        {
+                            Text = $"  Hata: {check.Exception}",
+                            Font = new Font("Segoe UI", 9),
+                            ForeColor = Color.Red,
+                            Location = new Point(60, y),
+                            AutoSize = true
+                        };
+                        _contentPanel.Controls.Add(exLabel);
+                        y += 25;
+                    }
+                }
+            }
+
+            SetStatus($"Sistem durumu: {health?.Status}");
+        }
+        catch (Exception ex)
+        {
+            ShowError("API bağlantı hatası", ex.Message);
+        }
+    }
+
+    private void ShowSettingsPage()
+    {
+        ClearContent();
+        SetStatus("Ayarlar");
+
+        var titleLabel = new Label
+        {
+            Text = "Ayarlar",
+            Font = new Font("Segoe UI", 18, FontStyle.Bold),
+            Location = new Point(20, 20),
+            AutoSize = true
+        };
+        _contentPanel.Controls.Add(titleLabel);
+
+        // API Bağlantısı Bölümü
+        var apiGroupBox = new GroupBox
+        {
+            Text = "API Bağlantısı",
+            Location = new Point(20, 70),
+            Size = new Size(500, 120),
+            Font = new Font("Segoe UI", 10)
+        };
+
+        var lblApiUrl = new Label
+        {
+            Text = "API URL:",
+            Location = new Point(15, 30),
+            AutoSize = true
+        };
+        apiGroupBox.Controls.Add(lblApiUrl);
+
+        var txtApiUrl = new TextBox
+        {
+            Text = _apiClient.BaseUrl,
+            Location = new Point(15, 55),
+            Size = new Size(350, 25)
+        };
+        apiGroupBox.Controls.Add(txtApiUrl);
+
+        var btnTestConnection = new Button
+        {
+            Text = "Bağlantıyı Test Et",
+            Location = new Point(375, 53),
+            Size = new Size(110, 28),
+            BackColor = Color.FromArgb(0, 122, 204),
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat,
+            Cursor = Cursors.Hand
+        };
+        btnTestConnection.Click += async (s, e) =>
+        {
+            try
+            {
+                btnTestConnection.Enabled = false;
+                btnTestConnection.Text = "Test ediliyor...";
+
+                var testUrl = txtApiUrl.Text.Trim();
+                var health = await _apiClient.TestConnectionAsync(testUrl);
+                MessageBox.Show(
+                    $"Bağlantı başarılı!\n\nSistem Durumu: {health?.Status ?? "Bilinmiyor"}",
+                    "Başarılı",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"Bağlantı hatası:\n{ex.Message}",
+                    "Hata",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+            finally
+            {
+                btnTestConnection.Enabled = true;
+                btnTestConnection.Text = "Bağlantıyı Test Et";
+            }
+        };
+        apiGroupBox.Controls.Add(btnTestConnection);
+
+        _contentPanel.Controls.Add(apiGroupBox);
+
+        // Sistem Durumu Bölümü
+        var healthGroupBox = new GroupBox
+        {
+            Text = "Sistem Durumu",
+            Location = new Point(20, 210),
+            Size = new Size(500, 100),
+            Font = new Font("Segoe UI", 10)
+        };
+
+        var lblHealthStatus = new Label
+        {
+            Text = "Yükleniyor...",
+            Location = new Point(15, 30),
+            AutoSize = true
+        };
+        healthGroupBox.Controls.Add(lblHealthStatus);
+
+        _contentPanel.Controls.Add(healthGroupBox);
+
+        // Sistem durumunu async olarak yükle
+        _ = LoadHealthStatusAsync(lblHealthStatus);
+    }
+
+    private async Task LoadHealthStatusAsync(Label lblHealthStatus)
+    {
+        try
+        {
+            var health = await _apiClient.GetHealthAsync();
+            var status = health?.Status ?? "Bilinmiyor";
+            var dbCheck = health?.Checks?.FirstOrDefault(c => c.Name == "database");
+            var dbStatus = dbCheck?.Status ?? "Bilinmiyor";
+
+            lblHealthStatus.Text = $"API: {status}  |  Veritabanı: {dbStatus}";
+            lblHealthStatus.ForeColor = status == "Healthy" ? Color.DarkGreen : Color.Red;
+        }
+        catch
+        {
+            lblHealthStatus.Text = "Bağlantı kurulamadı";
+            lblHealthStatus.ForeColor = Color.Red;
+        }
+    }
+
+    private async Task ShowCustomersAsync()
+    {
+        ClearContent();
+        SetStatus("Müşteriler yükleniyor...");
+
+        try
+        {
+            var customers = await _apiClient.GetCustomersAsync();
+
+            var titleLabel = new Label
+            {
+                Text = "Müşteriler",
+                Font = new Font("Segoe UI", 18, FontStyle.Bold),
+                Location = new Point(20, 20),
+                AutoSize = true
+            };
+            _contentPanel.Controls.Add(titleLabel);
+
+            var btnNewCustomer = new Button
+            {
+                Text = "+ Yeni Müşteri",
+                Location = new Point(_contentPanel.Width - 170, 20),
+                Size = new Size(130, 35),
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                BackColor = Color.FromArgb(0, 122, 204),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand
+            };
+            btnNewCustomer.Click += (s, e) => ShowNewCustomerForm();
+            _contentPanel.Controls.Add(btnNewCustomer);
+
+            var btnEdit = new Button
+            {
+                Text = "Düzenle",
+                Location = new Point(_contentPanel.Width - 420, 20),
+                Size = new Size(100, 35),
+                Anchor = AnchorStyles.Top | AnchorStyles.Right
+            };
+            _contentPanel.Controls.Add(btnEdit);
+
+            var btnDelete = new Button
+            {
+                Text = "Sil",
+                Location = new Point(_contentPanel.Width - 310, 20),
+                Size = new Size(100, 35),
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                BackColor = Color.FromArgb(220, 53, 69),
+                ForeColor = Color.White
+            };
+            _contentPanel.Controls.Add(btnDelete);
+
+            var grid = new DataGridView
+            {
+                Location = new Point(20, 70),
+                Size = new Size(_contentPanel.Width - 60, _contentPanel.Height - 100),
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+                ReadOnly = true,
+                AllowUserToAddRows = false,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+                BackgroundColor = Color.White,
+                BorderStyle = BorderStyle.None
+            };
+
+            grid.Columns.Add("Id", "ID");
+            grid.Columns["Id"]!.Visible = false;
+            grid.Columns.Add("FirmaAdi", "Firma Adı");
+            grid.Columns.Add("GLN", "GLN");
+            grid.Columns.Add("Aciklama", "Açıklama");
+
+            foreach (var c in customers)
+            {
+                grid.Rows.Add(c.Id, c.FirmaAdi, c.GLN, c.Aciklama);
+            }
+
+            _contentPanel.Controls.Add(grid);
+
+            btnEdit.Click += (s, e) =>
+            {
+                if (grid.SelectedRows.Count > 0)
+                {
+                    var row = grid.SelectedRows[0];
+                    var customer = new CustomerDto
+                    {
+                        Id = Guid.Parse(row.Cells["Id"].Value?.ToString() ?? ""),
+                        FirmaAdi = row.Cells["FirmaAdi"].Value?.ToString() ?? "",
+                        GLN = row.Cells["GLN"].Value?.ToString() ?? "",
+                        Aciklama = row.Cells["Aciklama"].Value?.ToString()
+                    };
+                    var form = new NewCustomerForm(_apiClient, customer);
+                    if (form.ShowDialog() == DialogResult.OK)
+                    {
+                        _ = ShowCustomersAsync();
+                    }
+                }
+            };
+
+            btnDelete.Click += async (s, e) =>
+            {
+                if (grid.SelectedRows.Count > 0)
+                {
+                    var id = Guid.Parse(grid.SelectedRows[0].Cells["Id"].Value?.ToString() ?? "");
+                    var firmaAdi = grid.SelectedRows[0].Cells["FirmaAdi"].Value?.ToString();
+
+                    var result = MessageBox.Show(
+                        $"\"{firmaAdi}\" müşterisini silmek istediğinizden emin misiniz?",
+                        "Silme Onayı",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Warning);
+
+                    if (result == DialogResult.Yes)
+                    {
+                        try
+                        {
+                            await _apiClient.DeleteCustomerAsync(id);
+                            await ShowCustomersAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show($"Silme hatası: {ex.Message}", "Hata", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        }
+                    }
+                }
+            };
+
+            SetStatus($"{customers.Count} müşteri listelendi");
+        }
+        catch (Exception ex)
+        {
+            ShowError("Müşteriler yüklenemedi", ex.Message);
+        }
+    }
+
+    private async Task ShowProductsAsync()
+    {
+        ClearContent();
+        SetStatus("Ürünler yükleniyor...");
+
+        try
+        {
+            var products = await _apiClient.GetProductsAsync();
+
+            var titleLabel = new Label
+            {
+                Text = "Ürünler",
+                Font = new Font("Segoe UI", 18, FontStyle.Bold),
+                Location = new Point(20, 20),
+                AutoSize = true
+            };
+            _contentPanel.Controls.Add(titleLabel);
+
+            var btnNewProduct = new Button
+            {
+                Text = "+ Yeni Ürün",
+                Location = new Point(_contentPanel.Width - 170, 20),
+                Size = new Size(130, 35),
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                BackColor = Color.FromArgb(0, 122, 204),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand
+            };
+            btnNewProduct.Click += (s, e) => ShowNewProductForm();
+            _contentPanel.Controls.Add(btnNewProduct);
+
+            var btnEdit = new Button
+            {
+                Text = "Düzenle",
+                Location = new Point(_contentPanel.Width - 420, 20),
+                Size = new Size(100, 35),
+                Anchor = AnchorStyles.Top | AnchorStyles.Right
+            };
+            _contentPanel.Controls.Add(btnEdit);
+
+            var btnDelete = new Button
+            {
+                Text = "Sil",
+                Location = new Point(_contentPanel.Width - 310, 20),
+                Size = new Size(100, 35),
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                BackColor = Color.FromArgb(220, 53, 69),
+                ForeColor = Color.White
+            };
+            _contentPanel.Controls.Add(btnDelete);
+
+            var grid = new DataGridView
+            {
+                Location = new Point(20, 70),
+                Size = new Size(_contentPanel.Width - 60, _contentPanel.Height - 100),
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+                ReadOnly = true,
+                AllowUserToAddRows = false,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+                BackgroundColor = Color.White,
+                BorderStyle = BorderStyle.None
+            };
+
+            grid.Columns.Add("Id", "ID");
+            grid.Columns["Id"]!.Visible = false;
+            grid.Columns.Add("CustomerId", "CustomerId");
+            grid.Columns["CustomerId"]!.Visible = false;
+            grid.Columns.Add("UrunAdi", "Ürün Adı");
+            grid.Columns.Add("GTIN", "GTIN");
+            grid.Columns.Add("CustomerName", "Müşteri");
+
+            foreach (var p in products)
+            {
+                grid.Rows.Add(p.Id, p.CustomerId, p.UrunAdi, p.GTIN, p.CustomerName);
+            }
+
+            _contentPanel.Controls.Add(grid);
+
+            btnEdit.Click += (s, e) =>
+            {
+                if (grid.SelectedRows.Count > 0)
+                {
+                    var row = grid.SelectedRows[0];
+                    var product = new ProductDto
+                    {
+                        Id = Guid.Parse(row.Cells["Id"].Value?.ToString() ?? ""),
+                        CustomerId = Guid.Parse(row.Cells["CustomerId"].Value?.ToString() ?? ""),
+                        UrunAdi = row.Cells["UrunAdi"].Value?.ToString() ?? "",
+                        GTIN = row.Cells["GTIN"].Value?.ToString() ?? "",
+                        CustomerName = row.Cells["CustomerName"].Value?.ToString() ?? ""
+                    };
+                    var form = new NewProductForm(_apiClient, product);
+                    if (form.ShowDialog() == DialogResult.OK)
+                    {
+                        _ = ShowProductsAsync();
+                    }
+                }
+            };
+
+            btnDelete.Click += async (s, e) =>
+            {
+                if (grid.SelectedRows.Count > 0)
+                {
+                    var id = Guid.Parse(grid.SelectedRows[0].Cells["Id"].Value?.ToString() ?? "");
+                    var urunAdi = grid.SelectedRows[0].Cells["UrunAdi"].Value?.ToString();
+
+                    var result = MessageBox.Show(
+                        $"\"{urunAdi}\" ürününü silmek istediğinizden emin misiniz?",
+                        "Silme Onayı",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Warning);
+
+                    if (result == DialogResult.Yes)
+                    {
+                        try
+                        {
+                            await _apiClient.DeleteProductAsync(id);
+                            await ShowProductsAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show($"Silme hatası: {ex.Message}", "Hata", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        }
+                    }
+                }
+            };
+
+            SetStatus($"{products.Count} ürün listelendi");
+        }
+        catch (Exception ex)
+        {
+            ShowError("Ürünler yüklenemedi", ex.Message);
+        }
+    }
+
+    private async Task ShowWorkOrdersAsync()
+    {
+        ClearContent();
+        SetStatus("İş emirleri yükleniyor...");
+
+        try
+        {
+            var workOrders = await _apiClient.GetWorkOrdersAsync();
+
+            var titleLabel = new Label
+            {
+                Text = "İş Emirleri",
+                Font = new Font("Segoe UI", 18, FontStyle.Bold),
+                Location = new Point(20, 20),
+                AutoSize = true
+            };
+            _contentPanel.Controls.Add(titleLabel);
+
+            var btnNewWorkOrder = new Button
+            {
+                Text = "+ Yeni İş Emri",
+                Location = new Point(_contentPanel.Width - 170, 20),
+                Size = new Size(130, 35),
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                BackColor = Color.FromArgb(0, 122, 204),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand
+            };
+            btnNewWorkOrder.Click += (s, e) => ShowNewWorkOrderForm();
+            _contentPanel.Controls.Add(btnNewWorkOrder);
+
+            var btnDeleteWorkOrder = new Button
+            {
+                Text = "Sil",
+                Location = new Point(_contentPanel.Width - 310, 20),
+                Size = new Size(100, 35),
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                BackColor = Color.FromArgb(220, 53, 69),
+                ForeColor = Color.White
+            };
+            _contentPanel.Controls.Add(btnDeleteWorkOrder);
+
+            var grid = new DataGridView
+            {
+                Location = new Point(20, 70),
+                Size = new Size(_contentPanel.Width - 60, _contentPanel.Height - 150),
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+                ReadOnly = true,
+                AllowUserToAddRows = false,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+                BackgroundColor = Color.White,
+                BorderStyle = BorderStyle.None
+            };
+
+            grid.Columns.Add("Id", "ID");
+            grid.Columns["Id"]!.Visible = false;
+            grid.Columns.Add("ProductName", "Ürün");
+            grid.Columns.Add("LotNo", "Lot No");
+            grid.Columns.Add("Miktar", "Miktar");
+            grid.Columns.Add("SKT", "Son Kullanma");
+            grid.Columns.Add("Durum", "Durum");
+
+            string[] durumlar = { "Oluşturuldu", "Devam Ediyor", "Tamamlandı", "İptal" };
+
+            foreach (var w in workOrders)
+            {
+                var durumInt = (int)w.Durum;
+                var durum = durumInt >= 0 && durumInt < durumlar.Length ? durumlar[durumInt] : "?";
+                grid.Rows.Add(w.Id, w.ProductName, w.LotNo, w.Miktar, w.SonKullanmaTarihi.ToString("dd.MM.yyyy"), durum);
+            }
+
+            _contentPanel.Controls.Add(grid);
+
+            var btnDetail = new Button
+            {
+                Text = "Detay Görüntüle",
+                Location = new Point(20, _contentPanel.Height - 60),
+                Size = new Size(150, 40),
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left
+            };
+            btnDetail.Click += async (s, e) =>
+            {
+                if (grid.SelectedRows.Count > 0)
+                {
+                    var id = Guid.Parse(grid.SelectedRows[0].Cells["Id"].Value?.ToString() ?? "");
+                    await ShowWorkOrderDetailAsync(id);
+                }
+            };
+            _contentPanel.Controls.Add(btnDetail);
+
+            var btnAggregate = new Button
+            {
+                Text = "Agregasyon Yap",
+                Location = new Point(180, _contentPanel.Height - 60),
+                Size = new Size(150, 40),
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
+                BackColor = Color.FromArgb(0, 122, 204),
+                ForeColor = Color.White
+            };
+            btnAggregate.Click += async (s, e) =>
+            {
+                if (grid.SelectedRows.Count > 0)
+                {
+                    var id = Guid.Parse(grid.SelectedRows[0].Cells["Id"].Value?.ToString() ?? "");
+                    await AggregateWorkOrderAsync(id);
+                }
+            };
+            _contentPanel.Controls.Add(btnAggregate);
+
+            btnDeleteWorkOrder.Click += async (s, e) =>
+            {
+                if (grid.SelectedRows.Count > 0)
+                {
+                    var id = Guid.Parse(grid.SelectedRows[0].Cells["Id"].Value?.ToString() ?? "");
+                    var lotNo = grid.SelectedRows[0].Cells["LotNo"].Value?.ToString();
+
+                    var result = MessageBox.Show(
+                        $"\"{lotNo}\" iş emrini silmek istediğinizden emin misiniz?\n\nBu işlem tüm seri numaralarını ve paketleme birimlerini de silecektir!",
+                        "Silme Onayı",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Warning);
+
+                    if (result == DialogResult.Yes)
+                    {
+                        try
+                        {
+                            await _apiClient.DeleteWorkOrderAsync(id);
+                            await ShowWorkOrdersAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show($"Silme hatası: {ex.Message}", "Hata", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        }
+                    }
+                }
+            };
+
+            SetStatus($"{workOrders.Count} iş emri listelendi");
+        }
+        catch (Exception ex)
+        {
+            ShowError("İş emirleri yüklenemedi", ex.Message);
+        }
+    }
+
+    private async Task ShowWorkOrderDetailAsync(Guid id)
+    {
+        ClearContent();
+        SetStatus("İş emri detayı yükleniyor...");
+
+        try
+        {
+            var detail = await _apiClient.GetWorkOrderDetailAsync(id);
+            if (detail == null)
+            {
+                ShowError("Hata", "İş emri bulunamadı");
+                return;
+            }
+
+            // Üretim durumu istatistiklerini al
+            var productionStatus = await _apiClient.GetProductionStatusAsync(id);
+
+            var titleLabel = new Label
+            {
+                Text = $"İş Emri Detayı - {detail.LotNo}",
+                Font = new Font("Segoe UI", 18, FontStyle.Bold),
+                Location = new Point(20, 20),
+                AutoSize = true
+            };
+            _contentPanel.Controls.Add(titleLabel);
+
+            // Temel bilgi paneli
+            var infoPanel = new Panel
+            {
+                Location = new Point(20, 70),
+                Size = new Size(_contentPanel.Width - 60, 80),
+                BackColor = Color.FromArgb(240, 240, 240)
+            };
+
+            var info = $"Ürün: {detail.Product.UrunAdi} | GTIN: {detail.Product.GTIN}\n" +
+                       $"Müşteri: {detail.Customer.FirmaAdi} | GLN: {detail.Customer.GLN}\n" +
+                       $"Miktar: {detail.Miktar} | Lot: {detail.LotNo} | SKT: {detail.SonKullanmaTarihi:dd.MM.yyyy}";
+
+            var infoLabel = new Label
+            {
+                Text = info,
+                Location = new Point(10, 10),
+                AutoSize = true,
+                Font = new Font("Segoe UI", 10)
+            };
+            infoPanel.Controls.Add(infoLabel);
+            _contentPanel.Controls.Add(infoPanel);
+
+            // Üretim durumu istatistikleri paneli
+            var statsPanel = new Panel
+            {
+                Location = new Point(20, 160),
+                Size = new Size(_contentPanel.Width - 60, 60),
+                BackColor = Color.FromArgb(230, 245, 255)
+            };
+
+            var statsLabel = new Label
+            {
+                Text = $"Üretildi: {productionStatus?.Generated ?? 0} | " +
+                       $"Basıldı: {productionStatus?.Printed ?? 0} | " +
+                       $"Doğrulandı: {productionStatus?.Verified ?? 0} | " +
+                       $"Reddedildi: {productionStatus?.Rejected ?? 0} | " +
+                       $"Agrege: {productionStatus?.Aggregated ?? 0}",
+                Location = new Point(10, 10),
+                AutoSize = true,
+                Font = new Font("Segoe UI", 11, FontStyle.Bold)
+            };
+            statsPanel.Controls.Add(statsLabel);
+
+            var runningLabel = new Label
+            {
+                Text = productionStatus?.IsRunning == true ? "Üretim Çalışıyor" : "Üretim Durmuş",
+                Location = new Point(10, 35),
+                AutoSize = true,
+                Font = new Font("Segoe UI", 9),
+                ForeColor = productionStatus?.IsRunning == true ? Color.Green : Color.Gray
+            };
+            statsPanel.Controls.Add(runningLabel);
+
+            _contentPanel.Controls.Add(statsPanel);
+
+            // Aksiyon butonları paneli
+            var actionPanel = new Panel
+            {
+                Location = new Point(20, 230),
+                Size = new Size(_contentPanel.Width - 60, 50),
+                BackColor = Color.White
+            };
+
+            var btnPrint = new Button
+            {
+                Text = "Yazdır",
+                Location = new Point(0, 5),
+                Size = new Size(100, 40),
+                BackColor = Color.FromArgb(40, 167, 69),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand
+            };
+            btnPrint.Click += async (s, e) => await PrintSerialsAsync(id);
+            actionPanel.Controls.Add(btnPrint);
+
+            var btnVerify = new Button
+            {
+                Text = "Doğrula",
+                Location = new Point(110, 5),
+                Size = new Size(100, 40),
+                BackColor = Color.FromArgb(23, 162, 184),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand
+            };
+            btnVerify.Click += async (s, e) => await VerifySerialsAsync(id);
+            actionPanel.Controls.Add(btnVerify);
+
+            var btnAggregate = new Button
+            {
+                Text = "Agregasyon",
+                Location = new Point(220, 5),
+                Size = new Size(100, 40),
+                BackColor = Color.FromArgb(0, 122, 204),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand
+            };
+            btnAggregate.Click += async (s, e) =>
+            {
+                await AggregateWorkOrderAsync(id);
+                await ShowWorkOrderDetailAsync(id);
+            };
+            actionPanel.Controls.Add(btnAggregate);
+
+            var btnRefresh = new Button
+            {
+                Text = "Yenile",
+                Location = new Point(330, 5),
+                Size = new Size(80, 40),
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand
+            };
+            btnRefresh.Click += async (s, e) => await ShowWorkOrderDetailAsync(id);
+            actionPanel.Controls.Add(btnRefresh);
+
+            var btnReset = new Button
+            {
+                Text = "Resetle",
+                Location = new Point(420, 5),
+                Size = new Size(100, 40),
+                BackColor = Color.FromArgb(255, 193, 7),
+                ForeColor = Color.Black,
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand
+            };
+            btnReset.Click += async (s, e) =>
+            {
+                var result = MessageBox.Show(
+                    "İş emrini resetlemek istediğinizden emin misiniz?\n\n" +
+                    "Bu işlem:\n" +
+                    "• Tüm serileri 'Üretildi' durumuna döndürecek\n" +
+                    "• Tüm koli ve paletleri silecek\n" +
+                    "• İş emri durumunu 'Oluşturuldu' yapacak",
+                    "Resetleme Onayı",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning);
+
+                if (result == DialogResult.Yes)
+                {
+                    await ResetWorkOrderAsync(id);
+                }
+            };
+            actionPanel.Controls.Add(btnReset);
+
+            _contentPanel.Controls.Add(actionPanel);
+
+            // Serial Numbers Grid
+            var serialLabel = new Label
+            {
+                Text = "Seri Numaraları",
+                Font = new Font("Segoe UI", 12, FontStyle.Bold),
+                Location = new Point(20, 290),
+                AutoSize = true
+            };
+            _contentPanel.Controls.Add(serialLabel);
+
+            var serialGrid = new DataGridView
+            {
+                Location = new Point(20, 320),
+                Size = new Size(_contentPanel.Width - 60, _contentPanel.Height - 400),
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+                ReadOnly = true,
+                AllowUserToAddRows = false,
+                BackgroundColor = Color.White,
+                BorderStyle = BorderStyle.None,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect
+            };
+
+            serialGrid.Columns.Add("Id", "ID");
+            serialGrid.Columns["Id"]!.Visible = false;
+            serialGrid.Columns.Add("SeriNo", "Seri No");
+            serialGrid.Columns.Add("GS1Barkod", "GS1 Barkod");
+            serialGrid.Columns.Add("Durum", "Durum");
+
+            string[] durumlar = { "Üretildi", "Basıldı", "Doğrulandı", "Reddedildi", "Agrege" };
+
+            foreach (var s in detail.SerialNumbers.Take(100))
+            {
+                var durumInt = (int)s.Durum;
+                var durum = durumInt >= 0 && durumInt < durumlar.Length ? durumlar[durumInt] : "?";
+                serialGrid.Rows.Add(s.Id, s.SeriNo, s.GS1Barkod, durum);
+            }
+
+            // Durum renklerini ayarla
+            foreach (DataGridViewRow row in serialGrid.Rows)
+            {
+                var durum = row.Cells["Durum"].Value?.ToString();
+                row.DefaultCellStyle.BackColor = durum switch
+                {
+                    "Üretildi" => Color.FromArgb(255, 255, 230),
+                    "Basıldı" => Color.FromArgb(230, 255, 230),
+                    "Doğrulandı" => Color.FromArgb(230, 255, 255),
+                    "Reddedildi" => Color.FromArgb(255, 230, 230),
+                    "Agrege" => Color.FromArgb(240, 240, 255),
+                    _ => Color.White
+                };
+            }
+
+            _contentPanel.Controls.Add(serialGrid);
+
+            // Reddedilmiş seri için tekrar doğrula butonu
+            var btnRetryVerify = new Button
+            {
+                Text = "Seçili Seriyi Tekrar Doğrula",
+                Location = new Point(20, _contentPanel.Height - 60),
+                Size = new Size(200, 35),
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
+                BackColor = Color.FromArgb(255, 193, 7),
+                ForeColor = Color.Black
+            };
+            btnRetryVerify.Click += async (s, e) =>
+            {
+                if (serialGrid.SelectedRows.Count > 0)
+                {
+                    var serialId = Guid.Parse(serialGrid.SelectedRows[0].Cells["Id"].Value?.ToString() ?? "");
+                    var durum = serialGrid.SelectedRows[0].Cells["Durum"].Value?.ToString();
+                    if (durum != "Reddedildi")
+                    {
+                        MessageBox.Show("Sadece reddedilmiş seriler tekrar doğrulanabilir.", "Uyarı", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    await RetryVerifySingleAsync(serialId, id);
+                }
+            };
+            _contentPanel.Controls.Add(btnRetryVerify);
+
+            var btnBack = new Button
+            {
+                Text = "< Geri",
+                Location = new Point(_contentPanel.Width - 120, _contentPanel.Height - 60),
+                Size = new Size(100, 35),
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Right
+            };
+            btnBack.Click += async (s, e) => await ShowWorkOrdersAsync();
+            _contentPanel.Controls.Add(btnBack);
+
+            SetStatus($"İş emri detayı: {detail.TotalSerials} seri numarası");
+        }
+        catch (Exception ex)
+        {
+            ShowError("Detay yüklenemedi", ex.Message);
+        }
+    }
+
+    private async Task PrintSerialsAsync(Guid workOrderId)
+    {
+        SetStatus("Seriler yazdırılıyor...");
+
+        try
+        {
+            var result = await _apiClient.PrintSerialsAsync(workOrderId);
+            MessageBox.Show(
+                $"Yazdırma tamamlandı!\n\n" +
+                $"Toplam: {result?.Total}\n" +
+                $"Başarılı: {result?.Printed}\n" +
+                $"Başarısız: {result?.Failed}",
+                "Yazdırma Sonucu",
+                MessageBoxButtons.OK,
+                result?.Failed > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+
+            await ShowWorkOrderDetailAsync(workOrderId);
+        }
+        catch (Exception ex)
+        {
+            ShowError("Yazdırma başarısız", ex.Message);
+        }
+    }
+
+    private async Task VerifySerialsAsync(Guid workOrderId)
+    {
+        SetStatus("Seriler doğrulanıyor...");
+
+        try
+        {
+            var result = await _apiClient.VerifySerialsAsync(workOrderId);
+            MessageBox.Show(
+                $"Doğrulama tamamlandı!\n\n" +
+                $"Toplam: {result?.Total}\n" +
+                $"Doğrulandı: {result?.Verified}\n" +
+                $"Reddedildi: {result?.Rejected}",
+                "Doğrulama Sonucu",
+                MessageBoxButtons.OK,
+                result?.Rejected > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+
+            await ShowWorkOrderDetailAsync(workOrderId);
+        }
+        catch (Exception ex)
+        {
+            ShowError("Doğrulama başarısız", ex.Message);
+        }
+    }
+
+    private async Task RetryVerifySingleAsync(Guid serialId, Guid workOrderId)
+    {
+        SetStatus("Seri tekrar doğrulanıyor...");
+
+        try
+        {
+            var result = await _apiClient.RetryVerifyAsync(serialId);
+            MessageBox.Show(
+                result?.Success == true
+                    ? "Seri numarası başarıyla doğrulandı!"
+                    : $"Doğrulama başarısız: {result?.Message}",
+                "Tekrar Doğrulama",
+                MessageBoxButtons.OK,
+                result?.Success == true ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+
+            await ShowWorkOrderDetailAsync(workOrderId);
+        }
+        catch (Exception ex)
+        {
+            ShowError("Tekrar doğrulama başarısız", ex.Message);
+        }
+    }
+
+    private async Task AggregateWorkOrderAsync(Guid id)
+    {
+        SetStatus("Agregasyon yapılıyor...");
+
+        try
+        {
+            var result = await _apiClient.AggregateWorkOrderAsync(id);
+            MessageBox.Show(
+                $"Agregasyon tamamlandı!\n\n" +
+                $"Toplam Seri: {result?.TotalSerials}\n" +
+                $"Oluşturulan Koli: {result?.TotalBoxes}\n" +
+                $"Oluşturulan Palet: {result?.TotalPallets}",
+                "Başarılı",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+
+            await ShowWorkOrdersAsync();
+        }
+        catch (Exception ex)
+        {
+            ShowError("Agregasyon başarısız", ex.Message);
+        }
+    }
+
+    private async Task ResetWorkOrderAsync(Guid id)
+    {
+        SetStatus("İş emri resetleniyor...");
+
+        try
+        {
+            await _apiClient.ResetWorkOrderAsync(id);
+            MessageBox.Show(
+                "İş emri başarıyla resetlendi!\n\n" +
+                "• Tüm seriler 'Üretildi' durumuna döndürüldü\n" +
+                "• Koli ve paletler silindi\n" +
+                "• İş emri durumu 'Oluşturuldu' yapıldı",
+                "Resetleme Başarılı",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+
+            await ShowWorkOrderDetailAsync(id);
+        }
+        catch (Exception ex)
+        {
+            ShowError("Resetleme başarısız", ex.Message);
+        }
+    }
+
+    private void ShowNewWorkOrderForm()
+    {
+        var form = new NewWorkOrderForm(_apiClient);
+        if (form.ShowDialog() == DialogResult.OK)
+        {
+            _ = ShowWorkOrdersAsync();
+        }
+    }
+
+    private void ShowNewCustomerForm()
+    {
+        var form = new NewCustomerForm(_apiClient);
+        if (form.ShowDialog() == DialogResult.OK)
+        {
+            _ = ShowCustomersAsync();
+        }
+    }
+
+    private void ShowNewProductForm()
+    {
+        var form = new NewProductForm(_apiClient);
+        if (form.ShowDialog() == DialogResult.OK)
+        {
+            _ = ShowProductsAsync();
+        }
+    }
+
+    private void ShowError(string title, string message)
+    {
+        SetStatus($"Hata: {message}");
+        MessageBox.Show(message, title, MessageBoxButtons.OK, MessageBoxIcon.Error);
+    }
+}
